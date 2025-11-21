@@ -12,3 +12,5 @@ void rightLongAndLow();
 void awp();
 void awp2();
 void test();
+void left4();
+void rifour();

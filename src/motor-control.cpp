@@ -1004,13 +1004,8 @@ void trackNoOdomWheel() {
     prev_left_deg = left_deg;
     prev_right_deg = right_deg;
     //logger.info("Position: (%f, %f) Heading: %f\u00B0", 0, 0, getInertialHeading());
-    Brain.Screen.clearScreen();
-    Brain.Screen.setCursor(7, 1);
-    Brain.Screen.print("X: %f", x_pos);
-    Brain.Screen.setCursor(8, 1);
-    Brain.Screen.print("Y: %f", y_pos);
-    Brain.Screen.setCursor(9, 1);
-    Brain.Screen.print("Z: %f", getInertialHeading());
+    
+    
 
     
     wait(10, msec);
