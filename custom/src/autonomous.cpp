@@ -487,25 +487,8 @@ void rightLongAndLow(){
     }
     return 0;
   });
-  manualIntake(12,0);
-  moveToPoint(11, 24, 1, 2000, false, 7);
-  turnToAngle(-80, 800, true, 8);
-  moveToPoint(8, 20, 1, 2000, true, 7);
-  turnToAngle(-60, 800, true, 8);
-  driveChassis(5,5);
-  vex::wait(500, msec);
-  manualIntake(-7, 0);
-  driveChassis(0,0);
-  vex::wait(200, msec);
-  driveChassis(-5, -5);
-  vex::wait(500, msec);
-  driveChassis(5,5);
-  vex::wait(500, msec);
-  driveChassis(-5, -5);
-  vex::wait(500, msec);
-  moveToPoint(11, 24, -1, 2000, false, 9);
-  correct_angle = 45;
-  moveToPoint(20, 27, -1, 2000, true, 7);
+  moveToPointChain(24, 24, 1, 2000, 9);
+  moveToPoint(-24, 15, 1, 2000, true, 7);
 
 
 }

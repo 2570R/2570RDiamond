@@ -4,7 +4,7 @@
 #include "../custom/include/intake.h"
 #include "../custom/include/logger.h"
 // Modify autonomous, driver, or pre-auton code below
-int auton_selected = 10;
+int auton_selected = 0;
 bool auto_started = false;
 
 void runAutonomous() {
@@ -15,36 +15,24 @@ void runAutonomous() {
       awp();
       break;
     case 1:
-      left9Long();
+      left7LongandWing();
       break;  
     case 2:
-      right9Long();
-      break;
-    case 3:
-      left7LongandWing();
-      break; 
-    case 4:
       right7LongandWing();
       break;
-    case 5:
+    case 3:
       leftLongAndMid();
-      break;
-    case 6:
-      rightLongAndLow();
-      break;
-    case 7:
-      left9LongDisrupt();
-      break;
-    case 8:
+      break; 
+    case 4:
       leftLongAndMidDisrupt();
       break;
-
-    case 9:
+    case 5:
       left4();
       break;
-    case 10:
+    case 6:
       rifour();
       break;
+    
 
     
   }
@@ -127,6 +115,8 @@ void runDriver() {
   }
 }
 
+
+
 void runPreAutonomous() {
     // Initializing Robot Configuration. DO NOT REMOVE!
   vexcodeInit();
@@ -155,38 +145,40 @@ void runPreAutonomous() {
   while(!auto_started){
     Brain.Screen.clearScreen();
     Brain.Screen.printAt(5, 20, "Selected Auton:");
+    Brain.Screen.printAt(5, 40, "-----------");
+    Brain.Screen.printAt(5, 90, "-----------");
+ 
     switch(auton_selected){
       case 0:
-        Brain.Screen.printAt(5, 40, "AWP");
+        Brain.Screen.printAt(5, 60, "AWP");
         break;
       case 1:
-        Brain.Screen.printAt(5, 40, "Left 9 Long");
+        Brain.Screen.printAt(5, 60, "Left 7 Wing");
         break;
       case 2:
-        Brain.Screen.printAt(5, 40, "Right 9 Long");
+        Brain.Screen.printAt(5, 60, "Right 7 Wing");
         break;
       case 3:
-        Brain.Screen.printAt(5, 40, "Left 7 & Wing");
+        Brain.Screen.printAt(5, 60, "Left Long And Mid Rush");
         break;
       case 4:
-        Brain.Screen.printAt(5, 40, "Right 7 & Wing");
+        Brain.Screen.printAt(5, 60, "Left Long And Mid No Rush");
         break;
       case 5:
-        Brain.Screen.printAt(5, 40, "Left Long + Mid");
+        Brain.Screen.printAt(5, 60, "Left 4 Wing");
         break;
       case 6:
-        Brain.Screen.printAt(5, 40, "Right Long + Low");
+        Brain.Screen.printAt(5, 60, "Right 4 Wing");
         break;
-      case 7:
-        Brain.Screen.printAt(5, 40, "Left 9 & Disrupt");
-        break;
-      case 8:
-        Brain.Screen.printAt(5, 40, "Left Long & Mid + Disrupt");
-        break;
-      case 9:
-        Brain.Screen.printAt(5, 40, "Right 9 & Disrupt");
-        break;
+      
     }
+    if(Brain.Screen.pressing()){
+      while(Brain.Screen.pressing()) {}
+      auton_selected ++;
+    } else if (auton_selected == 7){
+      auton_selected = 0;
+    }
+    wait(10, msec);
     
   }
 }

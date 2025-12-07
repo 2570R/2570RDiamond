@@ -1004,13 +1004,7 @@ void trackNoOdomWheel() {
     prev_left_deg = left_deg;
     prev_right_deg = right_deg;
     //logger.info("Position: (%f, %f) Heading: %f\u00B0", 0, 0, getInertialHeading());
-    Brain.Screen.clearScreen();
-    Brain.Screen.setCursor(7, 1);
-    Brain.Screen.print("X: %f", x_pos);
-    Brain.Screen.setCursor(8, 1);
-    Brain.Screen.print("Y: %f", y_pos);
-    Brain.Screen.setCursor(9, 1);
-    Brain.Screen.print("Z: %f", getInertialHeading());
+    
 
     
     wait(10, msec);
@@ -1438,7 +1432,9 @@ void moveToPointChain(double x, double y, int dir, double exit_dist, double time
     
     // Max Output Check
     scaleToMax(left_output, right_output, max_output);
-
+    if(fabs(hypot(x - x_pos, y - y_pos)) < 2){
+      break;
+    }
     prev_left_output = left_output;
     prev_right_output = right_output;
     driveChassis(left_output, right_output); // Apply output to chassis
