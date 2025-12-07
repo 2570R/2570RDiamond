@@ -1,7 +1,7 @@
 {
 	"project": {
 		"name": "RW-Template",
-		"slot": 3,
+		"slot": 8,
 		"description": "Empty V5 C++ Project",
 		"platform": "V5",
 		"creationDate": "Fri, 31 Oct 2025 03:17:33 GMT",

@@ -15,7 +15,6 @@ void runAutonomous() {
       awp();
       break;
     case 1:
-      //rightwing4();
       left9Long();
       break;  
     case 2:
@@ -41,18 +40,13 @@ void runAutonomous() {
       break;
 
     case 9:
-      right9LongDisrupt();
+      left4();
       break;
-
     case 10:
-      //right9LongDisrupt();
-      //test();
-      leftwing4();
-      break;
-    case 11:
-      rightwing4();
+      rifour();
       break;
 
+    
   }
   
 }
