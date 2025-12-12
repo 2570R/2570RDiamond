@@ -1602,6 +1602,151 @@ void boomerang(double x, double y, int dir, double a, double dlead, double time_
   is_turning = false;     // Reset turning state
 }
 
+/*
+ * followPath
+ * Follows a Bezier curve path using the Ramsete controller.
+ * - p0, p1, p2, p3: Control points for the Bezier curve.
+ * - timeout_ms: Maximum time allowed for the path (in milliseconds).
+ */
+void followPath(Point p0, Point p1, Point p2, Point p3, int timeout_ms) {
+  stopChassis(vex::brakeType::coast); // Stop chassis before starting
+  is_turning = true;                  // Set turning state
+  
+  // Ramsete controller constants
+  double zeta = 0.7;  // Damping ratio (typically 0.7-1.0)
+  double b = 1.0;     // Convergence parameter (typically 1.0-3.0)
+  double kV = 2.4;  // Feedforward velocity gain (volts per in/s)
+  double kW = 3.5;  // Feedforward angular velocity gain (volts per rad/s)
+  
+  // Generate waypoints from Bezier curve
+  BezierCurve curve = BezierCurve(p0, p1, p2, p3);
+  curve.generateWaypoints();
+  int waypointCount = curve.waypoints.size();
+  
+  if (waypointCount == 0) {
+    is_turning = false;
+    return;
+  }
+  
+  int currentWaypoint = 0;
+  double start_time = Brain.timer(msec);
+  double left_output = 0, right_output = 0;
+  double prev_left_output = 0, prev_right_output = 0;
+  
+  Brain.Screen.setPenColor(black);
+  
+  // Main Ramsete control loop
+  while (Brain.timer(msec) - start_time <= timeout_ms && currentWaypoint < waypointCount - 1) {
+    // Get current robot pose
+    double robot_x = x_pos;
+    double robot_y = y_pos;
+    double robot_theta = degToRad(getInertialHeading());
+    
+    // Find closest waypoint
+    int closest = currentWaypoint;
+    double closest_dist = std::hypot(robot_x - curve.waypoints[closest].x, 
+                                      robot_y - curve.waypoints[closest].y);
+    
+    // Look ahead to find the closest waypoint
+    while (closest + 1 < waypointCount - 1) {
+      double next_dist = std::hypot(robot_x - curve.waypoints[closest + 1].x, 
+                                    robot_y - curve.waypoints[closest + 1].y);
+      if (next_dist < closest_dist) {
+        closest++;
+        closest_dist = next_dist;
+      } else {
+        break;
+      }
+    }
+    
+    currentWaypoint = std::min(closest + 1, waypointCount - 1);
+    Waypoint wp = curve.waypoints[currentWaypoint];
+    
+    // Target pose
+    double xt = wp.x;
+    double yt = wp.y;
+    double thetat = wp.theta;  // Already in radians (compass angle)
+    
+    // Target velocities
+    double vt = wp.linvel * kV;  // Convert to voltage feedforward
+    double wt = wp.angvel * kW;  // Convert to voltage feedforward
+    
+    // Calculate errors in robot frame
+    double dx = xt - robot_x;
+    double dy = yt - robot_y;
+    
+    double cosTheta = std::cos(robot_theta);
+    double sinTheta = std::sin(robot_theta);
+    
+    double error_x = cosTheta * dx + sinTheta * dy;
+    double error_y = -sinTheta * dx + cosTheta * dy;
+    double error_theta = std::atan2(std::sin(thetat - robot_theta), 
+                                     std::cos(thetat - robot_theta));
+    
+    // Ramsete controller
+    double k = 2 * zeta * std::sqrt(wt * wt + b * vt * vt);
+    double u1 = -k * error_x;
+    double u2 = -b * vt * error_y - k * error_theta;
+    
+    // Handle small angle approximation for error_theta
+    if (std::abs(error_theta) > 1e-5) {
+      u2 = -b * vt * std::sin(error_theta) / error_theta * error_y - k * error_theta;
+    }
+    
+    // Calculate desired velocities
+    double v = vt * std::cos(error_theta) - u1;
+    double w = wt - u2;
+    
+    // Convert to left and right wheel velocities (in voltage)
+    double leftVel = v - w * (distance_between_wheels / 2.0);
+    double rightVel = v + w * (distance_between_wheels / 2.0);
+    
+    // Convert velocities to voltages (simple feedforward)
+    // Assuming max velocity is around 24 in/s at 12V
+    left_output = leftVel;
+    right_output = rightVel;
+    
+    // Max Output Check
+    scaleToMax(left_output, right_output, 12.0);
+    
+    // Max Acceleration/Deceleration Check (slew rate limiting)
+    double max_slew = 2.0;  // Max voltage change per 10ms
+    if (prev_left_output - left_output > max_slew) {
+      left_output = prev_left_output - max_slew;
+    }
+    if (prev_right_output - right_output > max_slew) {
+      right_output = prev_right_output - max_slew;
+    }
+    if (left_output - prev_left_output > max_slew) {
+      left_output = prev_left_output + max_slew;
+    }
+    if (right_output - prev_right_output > max_slew) {
+      right_output = prev_right_output + max_slew;
+    }
+    
+    prev_left_output = left_output;
+    prev_right_output = right_output;
+    
+    // Apply output to chassis
+    driveChassis(left_output, right_output);
+    
+    // Check if we've reached the end of the path
+    if (currentWaypoint >= waypointCount - 1) {
+      double dist_to_end = std::hypot(robot_x - curve.waypoints[waypointCount - 1].x,
+                                      robot_y - curve.waypoints[waypointCount - 1].y);
+      if (dist_to_end < 1.0) {  // Within 1 inch of final waypoint
+        break;
+      }
+    }
+    
+    wait(10, msec);
+  }
+  
+  Brain.Screen.clearScreen(red);
+  stopChassis(vex::hold); // Stop at end
+  correct_angle = getInertialHeading(); // Update global heading
+  is_turning = false;                   // Reset turning state
+}
 // ============================================================================
 // TEMPLATE NOTE
 // ============================================================================

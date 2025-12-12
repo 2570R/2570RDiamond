@@ -1,5 +1,8 @@
 #include <string>
 #include <cmath>
+#include "mp.h"
+#include "maths.h"
+#include "pose.h"
 
 // --- Global Variables (snake_case) ---
 extern bool is_turning;
@@ -33,3 +36,4 @@ void moveToPoint(double x, double y, int dir, double time_limit_msec, bool exit 
 void moveToPointChain(double x, double y, int dir, double exit_dist, double time_limit_msec, double max_output = 12, bool overturn = false);
 void boomerang(double x, double y, int dir, double a, double dlead, double time_limit_msec, bool exit = true, double max_output = 12, bool overturn = false);
 void driveToDist(double distance_mm, int dir, double time_limit_msec, bool exit = true, double max_output = 12);
+void followPath(Point p0, Point p1, Point p2, Point p3, int timeout_ms);
