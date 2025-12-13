@@ -1,4 +1,4 @@
-# 2570R Space City - Code Documentation
+# 2570R - Code Documentation
 
 ## Table of Contents
 1. [Asymptotic Gains](#asymptotic-gains)
