@@ -5,8 +5,9 @@
 2. [Feedforward and Friction Compensation](#feedforward-and-friction-compensation)
 3. [Motion Profiling](#motion-profiling)
 4. [Ramsete Controller](#ramsete-controller)
-5. [Movement Functions](#movement-functions)
-6. [File Structure](#file-structure)
+5. [Odometry Reset with Distance Sensors](#odometry-reset-with-distance-sensors)
+6. [Movement Functions](#movement-functions)
+7. [File Structure](#file-structure)
 
 ---
 
@@ -521,6 +522,359 @@ error_θ:  ██████░░░░░░░░░░░░░░  → 0
 - **Guaranteed stability**: Mathematical proof of convergence
 - **Feedforward**: Uses desired velocity for smoother motion
 - **Robot-frame errors**: More intuitive error representation
+
+---
+
+## Odometry Reset with Distance Sensors
+
+### Overview
+The robot uses three distance sensors (front, left, right) to reset its odometry position by measuring distances to field walls. This provides accurate absolute positioning without relying on encoder accumulation errors.
+
+### Sensor Configuration
+The system uses three distance sensors mounted on the robot:
+
+```
+Robot Top View:
+        ↑ (Front)
+        │
+    ┌───┼───┐
+    │   │   │
+    │   R   │  ← Robot
+    │       │
+    └───┼───┘
+        │
+        
+Sensor Positions:
+  Front:  PHI_FRONT = 0°    (points forward)
+  Right:  PHI_RIGHT = 90°   (points right)
+  Left:   PHI_LEFT = -90°    (points left)
+```
+
+**Visual Sensor Layout:**
+```
+        Front Sensor (0°)
+            ↑
+            │
+    ┌───────┼───────┐
+    │       │       │
+Left│       R       │Right
+(-90°)     │      (90°)
+    │       │       │
+    └───────┼───────┘
+            │
+         Robot Center
+```
+
+### Field Coordinate System
+The field uses a standard coordinate system with walls at known positions:
+
+```
+Field Layout:
+  Y
+  ↑
+  │
+72│───────────────────  North Wall (Y = 72)
+  │                   │
+  │                   │
+  │      Field        │
+  │                   │
+  │                   │
+-72│───────────────────  South Wall (Y = -72)
+  │
+  └──────────────────────→ X
+ -72                   72
+West Wall              East Wall
+(X = -72)              (X = 72)
+```
+
+### Relocalization Process
+
+The `relocalize()` function calculates the robot's position using sensor readings and known wall positions.
+
+**Step 1: Read Sensor Values**
+```cpp
+double dFront = readSensor(frontDistanceSensor);  // mm → inches
+double dRight = readSensor(rightDistanceSensor);
+double dLeft  = readSensor(leftDistanceSensor);
+```
+
+**Step 2: Determine Which Walls to Use**
+The function accepts a string parameter indicating which walls are visible:
+- `"N"` - North wall (Y = 72)
+- `"S"` - South wall (Y = -72)
+- `"E"` - East wall (X = 72)
+- `"W"` - West wall (X = -72)
+- Combinations: `"NW"`, `"SE"`, `"NSE"`, etc.
+
+**Step 3: Calculate Y Coordinate (North/South)**
+```
+If using North or South wall:
+  1. Get wall Y coordinate (72 or -72)
+  2. Project front sensor distance onto global Y-axis
+  3. Calculate: Y_robot = Y_wall - projection_Y
+```
+
+**Visual Example - North Wall:**
+```
+        North Wall (Y = 72)
+        ───────────────────
+              │
+              │ dFront
+              │
+              ↓
+        ┌─────┼─────┐
+        │     R     │  Robot at heading θ
+        └───────────┘
+              │
+              │
+        projection_Y = dFront × sin(θ + 0°)
+        
+        Y_robot = 72 - projection_Y
+```
+
+**Step 4: Calculate X Coordinate (East/West)**
+```
+If using East or West wall:
+  1. Get wall X coordinate (72 or -72)
+  2. Find best sensor (front, left, or right) pointing toward wall
+  3. Project sensor distance onto global X-axis
+  4. Calculate: X_robot = X_wall - projection_X
+```
+
+**Visual Example - East Wall:**
+```
+East Wall (X = 72)
+│
+│  dRight
+│    ←───┐
+│        │
+│    ┌───┼───┐
+│    │   R   │  Robot at heading θ
+│    └───────┘
+│        │
+│        │
+│  projection_X = dRight × cos(θ + 90°)
+│
+X_robot = 72 - projection_X
+```
+
+### Projection Mathematics
+
+The `computeProjection()` function projects sensor distances onto global axes:
+
+**For X-coordinate:**
+```
+projection_X = distance × cos(θ + φ)
+```
+Where:
+- `distance`: Sensor reading (inches)
+- `θ`: Robot heading (degrees)
+- `φ`: Sensor angle offset (0°, 90°, -90°)
+
+**For Y-coordinate:**
+```
+projection_Y = distance × sin(θ + φ)
+```
+
+**Visual Projection:**
+```
+Global Coordinate System:
+        Y ↑
+          │
+          │    Sensor reading (d)
+          │      ╱
+          │     ╱
+          │    ╱ angle = θ + φ
+          │   ╱
+          │  ╱
+          │ ╱
+          └──────────────→ X
+          
+Projection onto X: d × cos(θ + φ)
+Projection onto Y: d × sin(θ + φ)
+```
+
+### Sensor Selection Logic
+
+For X-coordinate calculation, the system selects the best sensor:
+
+**East Wall (X = 72):**
+1. Start with right sensor (points toward +X)
+2. Check if front sensor has positive X projection
+3. Check if left sensor has positive X projection
+4. Use sensor with smallest positive projection (closest to wall)
+
+**West Wall (X = -72):**
+1. Start with left sensor (points toward -X)
+2. Check if front sensor has negative X projection
+3. Check if right sensor has negative X projection
+4. Use sensor with smallest negative projection (closest to wall)
+
+**Visual Sensor Selection:**
+```
+East Wall Scenario:
+  ┌─────────────────┐
+  │                 │
+  │  ┌───┐          │
+  │  │ R │          │  ← Robot
+  │  └───┘          │
+  │   ↑  ↑  ↑       │
+  │   L  F  R       │  All sensors can see wall
+  │                 │  System picks closest
+  └─────────────────┘
+```
+
+### Complete Example
+
+**Scenario: Robot near Northwest corner**
+
+```
+Field View:
+        Y
+        ↑
+      72│───────────────────
+        │                   │
+        │  ┌───┐            │
+        │  │ R │            │  Robot
+        │  └───┘            │
+        │                   │
+      -72│───────────────────
+        └────────────────────→ X
+      -72                  72
+```
+
+**Sensor Readings:**
+- Front: 24 inches (to North wall)
+- Right: 48 inches (to East wall)
+- Left: 12 inches (to West wall)
+- Heading: 45° (pointing Northeast)
+
+**Calculation:**
+```
+Using "NW" (North + West walls):
+
+Y-coordinate (North wall):
+  projection_Y = 24 × sin(45° + 0°) = 24 × 0.707 = 16.97"
+  Y_robot = 72 - 16.97 = 55.03"
+
+X-coordinate (West wall):
+  Best sensor: Left (closest to West wall)
+  projection_X = 12 × cos(45° + (-90°)) = 12 × cos(-45°) = 8.49"
+  X_robot = -72 - (-8.49) = -63.51"
+  
+Final Position: (-63.51, 55.03)
+```
+
+### Implementation Code
+
+```cpp
+void relocalize(std::string walls) {
+  double headingDeg = normalizeTarget(getInertialHeading());
+  
+  // Read all three sensors
+  double dFront = readSensor(frontDistanceSensor);
+  double dRight = readSensor(rightDistanceSensor);
+  double dLeft  = readSensor(leftDistanceSensor);
+  
+  // Calculate Y from North/South wall
+  if (walls.find('N') != std::string::npos) {
+    double projY = computeProjection(dFront, headingDeg, PHI_FRONT, false);
+    p.y = 72 - projY;  // North wall at Y = 72
+  }
+  else if (walls.find('S') != std::string::npos) {
+    double projY = computeProjection(dFront, headingDeg, PHI_FRONT, false);
+    p.y = -72 + projY;  // South wall at Y = -72
+  }
+  
+  // Calculate X from East/West wall
+  if (walls.find('E') != std::string::npos) {
+    // Find best sensor pointing toward East wall
+    // Project and calculate X
+    p.x = 72 - projX;
+  }
+  else if (walls.find('W') != std::string::npos) {
+    // Find best sensor pointing toward West wall
+    // Project and calculate X
+    p.x = -72 + projX;
+  }
+  
+  resetOdometry(p.x, p.y);  // Reset odometry to calculated position
+}
+```
+
+### Usage Examples
+
+**Reset using North and West walls:**
+```cpp
+relocalize("NW");  // Uses front sensor for Y, left sensor for X
+```
+
+**Reset using South and East walls:**
+```cpp
+relocalize("SE");  // Uses front sensor for Y, right sensor for X
+```
+
+**Reset using all walls (most accurate):**
+```cpp
+relocalize("NSEW");  // Uses best sensors for both X and Y
+```
+
+### Advantages
+
+- **Absolute positioning**: No drift from encoder accumulation
+- **Quick reset**: Instant position update
+- **Flexible**: Works with any combination of visible walls
+- **Accurate**: Typically within 1-2 inches of actual position
+- **Robust**: Multiple sensor options provide redundancy
+
+### Limitations
+
+- **Requires walls**: Must be near field boundaries
+- **Sensor range**: Distance sensors have limited range (~2000mm)
+- **Angle dependency**: Accuracy depends on robot heading
+- **Obstructions**: Objects between robot and wall affect readings
+
+### Visual Summary
+
+```
+┌─────────────────────────────────────────┐
+│  Relocalization Process Flow            │
+└─────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────┐
+│ Read 3 Sensors      │
+│ - Front (0°)        │
+│ - Right (90°)       │
+│ - Left (-90°)       │
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│ Determine Walls     │
+│ (N/S/E/W)          │
+└──────────┬──────────┘
+           │
+           ├──────────────┐
+           │              │
+           ▼              ▼
+┌─────────────────┐  ┌─────────────────┐
+│ Calculate Y     │  │ Calculate X     │
+│ (North/South)   │  │ (East/West)     │
+│ - Project front │  │ - Select best   │
+│   sensor        │  │   sensor        │
+│ - Y = wall -    │  │ - Project onto  │
+│   projection    │  │   X-axis        │
+└────────┬────────┘  └────────┬────────┘
+         │                    │
+         └──────────┬─────────┘
+                    ▼
+         ┌─────────────────────┐
+         │ Reset Odometry      │
+         │ x_pos = X           │
+         │ y_pos = Y           │
+         └─────────────────────┘
+```
 
 ---
 
