@@ -56,6 +56,7 @@ void runDriver() {
   
   matchloader.set(false);
   while (true) {
+    Brain.Screen.clearScreen(black);
     antiJamTask();
     // [-100, 100] for controller stick axis values
     ch1 = controller_1.Axis1.value();
@@ -109,7 +110,10 @@ void runDriver() {
         matchloader.set(false);
       }
     }
-
+    Brain.Screen.printAt(5, 60, "x: %.2f", x_pos);
+    Brain.Screen.printAt(5, 80, "y: %.2f", y_pos);
+    Brain.Screen.printAt(5, 100, "heading: %.2f", normalizeTarget(getInertialHeading()));
+    Brain.Screen.printAt(5, 120, "battery: %.2f", vexBatteryCapacityGet);
     
 
     wait(10, msec); 

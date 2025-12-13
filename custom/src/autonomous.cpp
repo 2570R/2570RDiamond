@@ -8,7 +8,11 @@
 #include "../include/autonomous.h"
 #include "motor-control.h"
 #include "../custom/include/intake.h"
+#include "../include/maths.h"
 
+double PHI_FRONT = 0.0;
+double PHI_RIGHT = -90.0;
+double PHI_LEFT  = 90.0;
 // IMPORTANT: Remember to add respective function declarations to custom/include/autonomous.h
 // Call these functions from custom/include/user.cpp
 // Format: returnType functionName() { code }
@@ -19,9 +23,124 @@ void resetOdometry(double x, double y){
   y_pos = y;
 }
 
+double readSensor(vex::distance &s) {
+  return s.value() / 25.4; // mm → inches
+}
+
+double getWallCoordinate(char wall) {
+  switch (wall) {
+      case 'N': return 72; // North wall is +Y max
+      case 'S': return -72;         // South wall is Y = -72
+      case 'E': return 72; // East wall is +X max
+      case 'W': return -72;         // West wall is X = 0
+  }
+  return 0.0;
+}
+
+double computeProjection(double d, double thetaDeg, double phiDeg, bool projectX) {
+  double the = degToRad(thetaDeg + phiDeg);
+
+  if (projectX)
+      return d * cos(the);
+  else
+      return d * sin(the);
+}
+
+void relocalize(std::string walls) {
+  Pose p = {NAN, NAN, NAN};
+  double headingDeg = normalizeTarget(getInertialHeading());
+
+  bool useNorth = walls.find('N') != std::string::npos;
+  bool useSouth = walls.find('S') != std::string::npos;
+  bool useEast  = walls.find('E') != std::string::npos;
+  bool useWest  = walls.find('W') != std::string::npos;
+
+  double dFront = readSensor(frontDistanceSensor);
+  double dRight = readSensor(rightDistanceSensor);
+  double dLeft  = readSensor(leftDistanceSensor);
+
+  // ---------- Y COORDINATE (North/South wall) ----------
+  if (useNorth || useSouth) {
+      char wall = useNorth ? 'N' : 'S';
+      double Ywall = getWallCoordinate(wall);
+
+      // Determine which sensor points toward the wall
+      // North wall = +Y direction
+      // South wall = -Y direction
+      double bestDist = INFINITY;
+      double sensorDist, phi;
+
+      if (useNorth) {
+          // sensor direction . global +Y
+          sensorDist = dFront; phi = PHI_FRONT;
+          bestDist = sensorDist * sin(degToRad(headingDeg + phi));
+
+          if (bestDist < 0) bestDist = INFINITY; // Wrong direction
+          // Check left
+          double projL = dLeft * sin(degToRad(headingDeg + PHI_LEFT));
+          if (projL > 0 && projL < bestDist) {sensorDist = dLeft; phi = PHI_LEFT; bestDist = projL;}
+          // Check right
+          double projR = dRight * sin(degToRad(headingDeg + PHI_RIGHT));
+          if (projR > 0 && projR < bestDist) {sensorDist = dRight; phi = PHI_RIGHT; bestDist = projR;}
+      }
+      else { // South (negative Y)
+          sensorDist = dFront; phi = PHI_FRONT;
+          bestDist = -sensorDist * sin(degToRad(headingDeg + phi));
+
+          if (bestDist < 0) bestDist = INFINITY;
+
+          double projL = -dLeft * sin(degToRad(headingDeg + PHI_LEFT));
+          if (projL > 0 && projL < bestDist) { sensorDist = dLeft; phi = PHI_LEFT; bestDist = projL; }
+
+          double projR = -dRight * sin(degToRad(headingDeg + PHI_RIGHT));
+          if (projR > 0 && projR < bestDist) { sensorDist = dRight; phi = PHI_RIGHT; bestDist = projR; }
+      }
+
+      double projY = computeProjection(sensorDist, headingDeg, phi, false);
+      if (useSouth) projY = -projY;
+
+      p.y = Ywall - projY;
+  }
+
+
+  // ---------- X COORDINATE (East/West wall) ----------
+  if (useEast || useWest) {
+      char wall = useEast ? 'E' : 'W';
+      double Xwall = getWallCoordinate(wall);
+
+      double bestDist = INFINITY;
+      double sensorDist, phi;
+
+      if (useEast) { // +X
+          sensorDist = dRight; phi = PHI_RIGHT; bestDist = sensorDist * cos(degToRad(headingDeg + phi));
+
+          double projF = dFront * cos(degToRad(headingDeg + PHI_FRONT));
+          if (projF > 0 && projF < bestDist) { sensorDist = dFront; phi = PHI_FRONT; bestDist = projF; }
+
+          double projL = dLeft * cos(degToRad(headingDeg + PHI_LEFT));
+          if (projL > 0 && projL < bestDist) { sensorDist = dLeft; phi = PHI_LEFT; bestDist = projL; }
+      }
+      else { // West, -X
+          sensorDist = dLeft; phi = PHI_LEFT; bestDist = -sensorDist * cos(degToRad(headingDeg + phi));
+
+          double projF = -dFront * cos(degToRad(headingDeg + PHI_FRONT));
+          if (projF > 0 && projF < bestDist) { sensorDist = dFront; phi = PHI_FRONT; bestDist = projF; }
+
+          double projR = -dRight * cos(degToRad(headingDeg + PHI_RIGHT));
+          if (projR > 0 && projR < bestDist) { sensorDist = dRight; phi = PHI_RIGHT; bestDist = projR; }
+      }
+
+      double projX = computeProjection(sensorDist, headingDeg, phi, true);
+      if (useWest) projX = -projX;
+
+      p.x = Xwall - projX;
+  }
+  resetOdometry(p.x, p.y);
+}
+
 void newChangeQOL(){
   followPath(Point(-10.5, 24), Point(-10.5, 24), Point(-10.5, 24), Point(-10.5, 24), true, 2000);
-  resetOdometry(-10.5, 24);
+  relocalize("NW");
 }
 
 void left9Long(){
