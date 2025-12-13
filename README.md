@@ -5,9 +5,12 @@
 2. [Feedforward and Friction Compensation](#feedforward-and-friction-compensation)
 3. [Motion Profiling](#motion-profiling)
 4. [Ramsete Controller](#ramsete-controller)
-5. [Odometry Reset with Distance Sensors](#odometry-reset-with-distance-sensors)
-6. [Movement Functions](#movement-functions)
-7. [File Structure](#file-structure)
+5. [Stanley Controller](#stanley-controller)
+6. [Pure Pursuit](#pure-pursuit)
+7. [APS Controller](#aps-controller)
+8. [Odometry Reset with Distance Sensors](#odometry-reset-with-distance-sensors)
+9. [Movement Functions](#movement-functions)
+10. [File Structure](#file-structure)
 
 ---
 
@@ -522,6 +525,501 @@ error_θ:  ██████░░░░░░░░░░░░░░  → 0
 - **Guaranteed stability**: Mathematical proof of convergence
 - **Feedforward**: Uses desired velocity for smoother motion
 - **Robot-frame errors**: More intuitive error representation
+
+---
+
+## Stanley Controller
+
+### Overview
+The Stanley controller is a path-following algorithm originally developed for autonomous vehicles. It combines heading error correction with crosstrack error compensation to provide stable path following. The controller is implemented in `followStanley()` and is particularly effective for high-speed path following.
+
+### How Stanley Works
+The Stanley controller calculates a steering angle based on two components:
+1. **Heading Error**: Difference between robot heading and path heading
+2. **Crosstrack Error**: Perpendicular distance from the robot to the path
+
+### Control Law
+The steering angle is calculated as:
+
+```
+steering = K_h × headingError + crosstrackScale
+
+where:
+  headingError = robot_heading - path_heading
+  crosstrackScale = atan(k × crosstrackError / velocity)
+```
+
+Where:
+- **K_h**: Heading error gain (default: 5)
+- **k**: Crosstrack error gain (tunable parameter)
+- **crosstrackError**: Signed perpendicular distance to path
+- **velocity**: Current robot speed
+
+**Visual Representation:**
+```
+Path:
+  ────────────────
+         │
+         │ crosstrackError
+         │
+         ● Robot
+         │
+    headingError
+         │
+    Path Heading ───→
+```
+
+### Path Following Process
+1. **Find closest path point**: Uses `path.closestIndex()` to find nearest waypoint
+2. **Calculate path heading**: Determines direction of path at current point
+3. **Compute errors**:
+   - Crosstrack error: Signed distance to path (positive = left of path)
+   - Heading error: Difference between robot and path headings
+4. **Calculate steering angle**: Combines both error terms
+5. **Convert to wheel velocities**: Uses Ackermann steering geometry
+
+### Crosstrack Error Calculation
+The crosstrack error is signed based on which side of the path the robot is on:
+
+```cpp
+crosstrackError = sign × distance(curPoint, robot)
+sign = -curvature(curPoint, robot, pathHeading)
+```
+
+This ensures:
+- **Positive error**: Robot is to the left of path → steer right
+- **Negative error**: Robot is to the right of path → steer left
+
+### Steering Angle to Wheel Velocities
+The steering angle is converted to differential drive using Ackermann geometry:
+
+```
+leftRatio = 2 + tan(steering) / 2.0
+rightRatio = 2 - tan(steering) / 2.0
+```
+
+**Visual:**
+```
+Steering Angle:
+  Positive (left turn):
+    ┌───┐
+    │ R │  ← Robot
+    └───┘
+     ╱
+    ╱  steering angle
+   ╱
+  
+  Wheel Velocities:
+    Left wheel:  faster
+    Right wheel: slower
+```
+
+### Dynamic Lookahead (Velocity-Based)
+The crosstrack correction term includes velocity in the denominator:
+
+```
+crosstrackScale = atan(k × crosstrackError / velocity)
+```
+
+This means:
+- **High speed**: Smaller correction (less aggressive)
+- **Low speed**: Larger correction (more aggressive)
+- **Prevents overshoot**: At high speeds, corrections are gentler
+
+### Path Index Management
+The controller uses a "furthest index" system to prevent backtracking:
+
+```cpp
+if (pathIndex > furthestIndex) furthestIndex = pathIndex;
+else if (pathIndex < furthestIndex) pathIndex = furthestIndex;
+```
+
+This ensures the robot always progresses forward along the path, even if it temporarily moves backward due to error.
+
+### Chase Power (Speed Limiting)
+Similar to Pure Pursuit, Stanley supports speed limiting based on turning radius:
+
+```cpp
+if (chasePower != -1) {
+  radius = trackWidth / tan(steering_angle);
+  voltageScale = min(sqrt(chasePower × radius × 1000000), voltageScale);
+}
+```
+
+This prevents the robot from exceeding safe speeds during sharp turns.
+
+### Implementation Details
+The controller runs in a loop:
+1. Get current robot pose
+2. Find closest path point (with furthest index tracking)
+3. Calculate path heading from adjacent points
+4. Compute crosstrack and heading errors
+5. Calculate steering angle
+6. Convert to wheel velocities using Ackermann geometry
+7. Apply chase power speed limiting
+8. Drive motors
+9. Repeat at 10ms intervals
+
+### Tuning Parameters
+- **k (crosstrack gain)**: Controls aggressiveness of crosstrack correction
+  - Higher k: More aggressive correction
+  - Lower k: Gentler correction
+  - Typical range: 0.5 - 5.0
+- **K_h (heading gain)**: Multiplier for heading error (default: 5)
+  - Higher: More responsive to heading errors
+  - Lower: Smoother but less responsive
+
+### Advantages
+- **Velocity-dependent**: Automatically adjusts correction based on speed
+- **Simple tuning**: Only one main parameter (k) to tune
+- **Smooth following**: Natural steering behavior
+- **High-speed capable**: Works well at various speeds
+
+### When to Use
+- High-speed path following
+- When you need simple, tunable path following
+- When velocity-dependent correction is desired
+- For paths with varying curvature
+
+---
+
+## Pure Pursuit
+
+### Overview
+Pure Pursuit is a geometric path-following algorithm that uses a "lookahead point" ahead of the robot on the path. The robot steers toward this lookahead point, creating smooth, natural following behavior. The implementation uses dynamic lookahead distance that adapts based on speed, curvature, and crosstrack error.
+
+### How Pure Pursuit Works
+Pure Pursuit works by:
+1. Finding a lookahead point ahead on the path
+2. Calculating the curvature needed to reach that point
+3. Converting curvature to wheel velocities
+4. Driving toward the lookahead point
+
+### Lookahead Distance
+The lookahead distance is dynamically calculated based on multiple factors:
+
+```
+lookahead = clamp(
+  velocity × pursuitVeloConst + 
+  radius × pursuitCurvConst - 
+  crosstrackError × pursuitCTEConst,
+  minLookahead,
+  maxLookahead
+)
+```
+
+Where:
+- **pursuitVeloConst**: Velocity contribution to lookahead
+- **pursuitCurvConst**: Curvature contribution to lookahead
+- **pursuitCTEConst**: Crosstrack error contribution (reduces lookahead when off-path)
+- **minLookahead**: Minimum lookahead distance
+- **maxLookahead**: Maximum lookahead distance
+
+**Visual Representation:**
+```
+Path:
+  ●───●───●───●───●───●
+       │       │
+       │       └─── Lookahead Point
+       │           (lookahead distance)
+       │
+       └─── Robot
+            (crosstrackError)
+```
+
+### Dynamic Lookahead Components
+
+**1. Velocity Component:**
+```
+velocity × pursuitVeloConst
+```
+- Higher speed → larger lookahead
+- Allows robot to "see further ahead" at high speeds
+- Prevents cutting corners
+
+**2. Curvature Component:**
+```
+radius × pursuitCurvConst
+```
+- Uses radius from robot to a point further ahead (`pathIndex + radiusLookahead`)
+- Sharp turns → larger lookahead (smoother following)
+- Straight paths → smaller lookahead (tighter following)
+
+**3. Crosstrack Error Component:**
+```
+-crosstrackError × pursuitCTEConst
+```
+- When off-path, reduces lookahead
+- Forces robot to correct more aggressively
+- Helps recover from large errors
+
+### Curvature Calculation
+Once the lookahead point is found, the curvature to reach it is calculated:
+
+```
+curvature = getCurvature(robot, lookaheadPoint)
+```
+
+The curvature is then converted to wheel velocity ratios:
+
+```
+leftRatio = 2 + curvature × trackWidth
+rightRatio = 2 - curvature × trackWidth
+```
+
+**Visual:**
+```
+Positive Curvature (left turn):
+  ┌───┐
+  │ R │  ← Robot
+  └───┘
+   ╱
+  ╱  curvature
+ ╱
+● Lookahead Point
+
+Wheel Velocities:
+  Left:  slower (leftRatio < 2)
+  Right: faster (rightRatio > 2)
+```
+
+### Lookahead Point Selection
+The algorithm finds the lookahead point by:
+1. Starting from the closest path point
+2. Searching forward along the path
+3. Finding the point exactly `lookahead` distance away
+4. Using interpolation if between waypoints
+
+### Chase Power (Speed Limiting)
+Pure Pursuit supports speed limiting based on turning radius:
+
+```cpp
+if (chasePower != -1) {
+  radius = getRadius(robot, lookaheadPoint);
+  voltageScale = min(sqrt(chasePower × radius / lookahead × 1000000), voltageScale);
+}
+```
+
+This prevents the robot from exceeding safe speeds during sharp turns.
+
+### Configuration
+The lookahead parameters are set using `setPursuitSettings()`:
+
+```cpp
+setPursuitSettings(
+  minLookahead,      // Minimum lookahead distance
+  maxLookahead,      // Maximum lookahead distance
+  pursuitVeloConst,  // Velocity contribution
+  pursuitCurvConst,  // Curvature contribution
+  pursuitCTEConst,   // Crosstrack error contribution
+  radiusLookahead    // How far ahead to look for curvature
+);
+```
+
+### Implementation Flow
+1. Get current robot pose
+2. Find closest path point
+3. Calculate dynamic lookahead distance
+4. Find lookahead point on path
+5. Calculate curvature to reach lookahead point
+6. Convert curvature to wheel velocity ratios
+7. Apply chase power speed limiting
+8. Drive motors
+9. Repeat at 10ms intervals
+
+### Tuning Guide
+- **minLookahead**: Start with 6-12 inches
+  - Too small: Oscillatory behavior
+  - Too large: Slow response, cuts corners
+- **maxLookahead**: Start with 18-24 inches
+  - Limits maximum lookahead for safety
+- **pursuitVeloConst**: Start with 0.1-0.3
+  - Controls how lookahead scales with speed
+- **pursuitCurvConst**: Start with 0.5-1.5
+  - Controls how lookahead scales with curvature
+- **pursuitCTEConst**: Start with 0.1-0.5
+  - Controls how crosstrack error reduces lookahead
+
+### Advantages
+- **Smooth following**: Natural steering behavior
+- **Adaptive**: Lookahead adjusts to conditions
+- **Geometric**: Intuitive to understand and tune
+- **Robust**: Works well on various path types
+
+### When to Use
+- Smooth, curved path following
+- When you want adaptive lookahead behavior
+- For paths with varying curvature
+- When you need predictable, geometric control
+
+---
+
+## APS Controller
+
+### Overview
+APS (Adaptive Path-following System) is a hybrid path-following controller that combines angular error correction with crosstrack error compensation. It uses a PID controller for heading correction and adaptively scales corrections based on distance from the path. APS is designed to provide smooth, stable path following with good convergence properties.
+
+### How APS Works
+APS uses two main correction terms:
+1. **Angular Term**: Corrects heading error relative to path heading
+2. **Crosstrack Term**: Corrects lateral position error
+
+These terms are combined and fed into a PID controller for smooth heading correction.
+
+### Path Heading Calculation
+APS calculates the path heading at the current point using adjacent waypoints:
+
+```cpp
+if (pathIndex == 0) 
+  pathHeading = curPoint.angle(nextPoint);
+else if (pathIndex == lastIndex) 
+  pathHeading = prevPoint.angle(curPoint);
+else 
+  pathHeading = 0.5 × (curPoint.angle(nextPoint) + prevPoint.angle(curPoint));
+```
+
+This provides:
+- **Start of path**: Uses forward direction
+- **End of path**: Uses backward direction
+- **Middle of path**: Averages forward and backward directions for smoothness
+
+### Angular Term
+The angular term corrects the robot's heading to match the path heading:
+
+```cpp
+angularTerm = pose.parallel(pathHeading)
+angularTerm = clamp(angularTerm / (25 × crosstrackError)², angularTerm)
+```
+
+**Adaptive Scaling:**
+- When **far from path** (large crosstrack error): Angular term is reduced
+- When **close to path** (small crosstrack error): Full angular correction
+- This prevents over-correction when far off-path
+
+**Visual:**
+```
+Far from Path:
+  ┌───┐
+  │ R │  ← Robot (far off)
+  └───┘
+       │
+       │ large crosstrackError
+       │
+  ─────┼───── Path
+       │
+  Reduced angular correction
+
+Close to Path:
+  ┌───┐
+  │ R │  ← Robot (close)
+  └───┘
+    │
+    │ small crosstrackError
+    │
+  ──┼─── Path
+    │
+  Full angular correction
+```
+
+### Crosstrack Term
+The crosstrack term corrects lateral position error:
+
+```cpp
+crosstrackTerm = 10 × crosstrackError × sign(face(curPoint))
+```
+
+Where:
+- **crosstrackError**: Distance from robot to closest path point
+- **sign(face(curPoint))**: Direction to turn toward path
+- **10**: Crosstrack gain (fixed)
+
+**Disabled near end:**
+- When `path.nearEnd(pathIndex)` is true, crosstrack term is set to 0
+- Prevents overshoot at path endpoint
+
+### Combined Control
+The two terms are combined and fed into a PID controller:
+
+```cpp
+headingOutput = PID.tick(angularTerm + crosstrackTerm)
+```
+
+The PID controller provides:
+- Smooth transitions
+- Damping to prevent oscillation
+- Integral action for steady-state accuracy
+
+### Path Index Management
+Similar to Stanley, APS uses furthest index tracking:
+
+```cpp
+if (pathIndex > furthestIndex) furthestIndex = pathIndex;
+else if (pathIndex < furthestIndex) pathIndex = furthestIndex;
+```
+
+This ensures forward progress along the path.
+
+### Speed Control
+APS uses the path's velocity profile directly:
+
+```cpp
+lateralOutput = curPoint.theta  // Path velocity
+```
+
+With optional chase power limiting:
+
+```cpp
+if (chasePower != -1) {
+  Pose lookaheadPoint = path.lookaheadPoint(pose, pathIndex, 1.8);
+  float radius = getRadius(pose, lookaheadPoint);
+  lateralOutput = min(sqrt(chasePower × radius × 1000000), lateralOutput);
+}
+```
+
+### Output Scaling
+The lateral and heading outputs are combined with rescaling to prevent saturation:
+
+```cpp
+rescale = |lateralOutput| + |headingOutput| - 12000.0
+if (rescale > 0) lateralOutput -= sign(rescale) × rescale
+```
+
+This ensures the combined output never exceeds motor limits.
+
+### Implementation Flow
+1. Get current robot pose
+2. Find closest path point (with furthest index tracking)
+3. Calculate path heading from adjacent points
+4. Compute crosstrack error
+5. Calculate angular term (with adaptive scaling)
+6. Calculate crosstrack term (disabled near end)
+7. Combine terms and feed to PID controller
+8. Get path velocity and apply chase power limiting
+9. Rescale outputs to prevent saturation
+10. Convert to wheel velocities
+11. Drive motors
+12. Repeat at 10ms intervals
+
+### Tuning Parameters
+- **maxSpeed**: Maximum speed multiplier (default: 1.0)
+  - Controls overall path following speed
+- **chasePower**: Speed limiting constant (optional)
+  - Limits speed based on turning radius
+  - Set to -1 to disable
+- **PID gains**: Tuned via the `turn` PID controller
+  - Note: PID is reset with Kp=0 at start, so gains should be set elsewhere
+
+### Advantages
+- **Adaptive correction**: Scales angular correction based on distance
+- **Smooth control**: PID provides damping
+- **Dual correction**: Both heading and position errors addressed
+- **Endpoint handling**: Disables crosstrack term near end to prevent overshoot
+
+### When to Use
+- When you need smooth, stable path following
+- For paths where adaptive correction is beneficial
+- When you want PID-based heading control
+- For paths with varying error conditions
 
 ---
 

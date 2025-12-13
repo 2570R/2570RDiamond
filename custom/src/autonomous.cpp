@@ -19,14 +19,11 @@
 #include "../../genFunctions/include/components/Inertial.h"
 
 Odometry odometry(-0.09, 0.5, 1.1);
-vex::rotation parallel(21);
-vex::rotation sideways(21);
-TrackingWheel parallelWheel(parallel, 2);
-TrackingWheel perpendicularWheel(sideways, 2);
+
+
 Inertial imu(inertial_sensor, 1.00035);
-OdometrySensors odomSensors(&parallelWheel, &perpendicularWheel, &imu);
-OdometryOffsets odomOffsets(0, 0);
-TwoWheelInertialOdometry odome(odomSensors, odomOffsets, foot);
+
+
 
 AsymptoticGains lateralKp1 = AsymptoticGains(15000, 15000, 1, 1);
 AsymptoticGains angularKp1 = AsymptoticGains(480, 220, 28, 1.7);

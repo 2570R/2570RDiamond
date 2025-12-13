@@ -76,7 +76,7 @@ float TwoWheelInertialOdometry::getUnit() {
 
 Pose TwoWheelInertialOdometry::getPose() {
     //returns the location and heading of the robot
-
+    
     return pose;
 }
 
