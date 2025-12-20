@@ -11,7 +11,7 @@ ChassisDriverSettings chassisDriverSettings(&controller_1, 1, 0, 10, false);
 TwoStickArcade chassis(chassisGeometry, chassisDriverSettings);
 
 // Modify autonomous, driver, or pre-auton code below
-int auton_selected = 1;
+int auton_selected = 0;
 bool auto_started = false;
 vex::thread* odom = nullptr;
 
@@ -23,11 +23,10 @@ void taskHandler(bool driver){
     odom->interrupt();
     delete odom;
     odom = nullptr;
-  }
   
 }
 
-
+}
 void runAutonomous() {
   auto_started = true;
   switch(auton_selected) {

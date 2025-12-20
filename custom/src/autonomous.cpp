@@ -652,9 +652,11 @@ void awp(){
   //awp
   driveTo(5, 600, true, 8);
   resetOdometry(0,5);
-  moveToPoint(-0.2, -34.5, -1, 2000, false, 10);
+  driveTo(-32, 2000, false, 10);
+  driveTo(-3, 600, true, 5);
+
   matchloader.set(true);
-  moveToPoint(-0.2, -37, -1, 2000, true, 7);
+  //moveToPoint(-0.2, -34, -1, 2000, true, 7);
   turnToAngle(-90, 800, true, 10);
   driveChassis(5.5, 5.5);
   vex::wait(600, msec);
@@ -667,7 +669,9 @@ void awp(){
   scoreLongGoal();
   vex::wait(500, msec);
   matchloader.set(false);
-  vex::wait(900, msec);
+  vex::wait(880, msec);
+  driveChassis(1,1);
+  vex::wait(20, msec);
   turnToAngle(0, 3000, true, 12);
   resetOdometry(-72 + leftDistanceSensor.value()/25.4, y_pos);
   storeIntake();
@@ -686,7 +690,7 @@ void awp(){
   moveToPoint(-32, 17.5, 1, 2000, true, 7);
   matchloader.set(true);
   boomerang(-16, -2, -1, -40, 0.6, 1000, true, 7);
-  driveChassis(-5, -5);
+  driveChassis(-2, -2);
   vex::wait(50, msec);
   scoreMiddleGoal();
   vex::wait(700, msec);
