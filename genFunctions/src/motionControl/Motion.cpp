@@ -1,6 +1,7 @@
 #include "motionControl/Motion.h"
 
 
+
 void Motion::setUnit(float unit) {
   //changes the length unit of the motion algorithms
 
@@ -187,7 +188,7 @@ void Motion::turnHeading(float target, int sides, float minSpeed, float maxSpeed
           && timer < timeout);
 
   headingTarget = target;
-
+  Misc::runDrivetrain(0, 0, false);
   left_chassis.stop();
   right_chassis.stop();
 }

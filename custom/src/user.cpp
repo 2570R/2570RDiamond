@@ -7,11 +7,11 @@
 
 
 ChassisGeometry chassisGeometry(&left_chassis, &right_chassis, 1);
-ChassisDriverSettings chassisDriverSettings(&controller_1, 1, 0, 800, true);
+ChassisDriverSettings chassisDriverSettings(&controller_1, 1, 0, 10, false);
 TwoStickArcade chassis(chassisGeometry, chassisDriverSettings);
 
 // Modify autonomous, driver, or pre-auton code below
-int auton_selected = 5;
+int auton_selected = 1;
 bool auto_started = false;
 vex::thread* odom = nullptr;
 
@@ -102,8 +102,8 @@ void runDriver() {
     button_right_arrow = controller_1.ButtonRight.pressing();
     
     // default tank drive or replace it with your preferred driver code here: 
-    //driveChassis(ch3 * 0.12 + ch1 * 0.123, ch3 * 0.12 - ch1 * 0.123);
-    chassis.controllerFeedbackSpin(false);
+    driveChassis(ch3 * 0.12 + ch1 * 0.123, ch3 * 0.12 - ch1 * 0.123);
+    //chassis.controllerFeedbackSpin(false);
     
     if(r1){
       storeIntake();

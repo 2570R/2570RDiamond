@@ -64,15 +64,15 @@ double wheel_distance_in = (36.0 / 48.0) * 3.17 * M_PI;
 // heading_correction_* : PID for heading correction during linear movement
 double distance_kp = 1.1, distance_ki = 0.1, distance_kd = 7;
 double turn_kp = 0.4, turn_ki = 0, turn_kd = 2.9;
-double heading_correction_kp = 1.1, heading_correction_ki = 0, heading_correction_kd = 4;
+double heading_correction_kp = 0.4, heading_correction_ki = 0, heading_correction_kd = 4;
 
 AsymptoticGains lateralKp = AsymptoticGains(15000, 15000, 1, 1);
-AsymptoticGains angularKp = AsymptoticGains(480, 220, 28, 1.7);
+AsymptoticGains angularKp = AsymptoticGains(400, 100, 1, 1);
 AsymptoticGains correctKp = AsymptoticGains(200, 200, 1, 1);
 
-PID lateralPID = PID(lateralKp, distance_ki, distance_kd);
-PID turnPID = PID(angularKp, turn_ki, turn_kd);
-PID correctPID = PID(correctKp, heading_correction_ki, heading_correction_kd);
+PID lateralPID = PID(distance_kp, distance_ki, distance_kd);
+PID turnPID = PID(turn_kp, turn_ki, turn_kd);
+PID correctPID = PID(heading_correction_kp, heading_correction_ki, heading_correction_kd);
 
 // Enable or disable the use of tracking wheels
 bool using_horizontal_tracker = false;  // Set to true if a horizontal tracking wheel is installed and used for odometry
@@ -101,7 +101,7 @@ double min_output = 6; // Minimum output voltage to motors while chaining moveme
 
 // Maximum allowed change in voltage output per 10 msec during movement
 double max_slew_accel_fwd = 24;
-double max_slew_decel_fwd = 0.1;
+double max_slew_decel_fwd = 10;
 double max_slew_accel_rev = 24;
 double max_slew_decel_rev = 2;
 

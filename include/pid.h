@@ -5,7 +5,7 @@
 
 class PID {
  public:
-  PID(AsymptoticGains& new_kp, double new_ki, double new_kd);
+  PID(double new_kp, double new_ki, double new_kd);
   
   // Adjust the kp, ki and kd if needed.
   void setCoefficient(double new_kp, double new_ki, double new_kd);
@@ -70,7 +70,7 @@ class PID {
   bool first_time;
 
   // PID Coefficient. 
-  AsymptoticGains& kp;
+  double kp;
   double ki, kd;
 
   // Do not consider integral if the proportional value

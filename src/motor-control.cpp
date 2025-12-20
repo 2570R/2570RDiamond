@@ -201,7 +201,7 @@ void turnToAngle(double turn_angle, double time_limit_msec, bool exit, double ma
       index++;
       previous_heading = current_heading;
       // Clamp output
-      if(output < min_output) output = min_output;
+      if(output < 2) output = 2;
       if(output > max_output) output = max_output;
       else if(output < -max_output) output = -max_output;
       driveChassis(output, -output);
@@ -215,7 +215,7 @@ void turnToAngle(double turn_angle, double time_limit_msec, bool exit, double ma
       Brain.Screen.drawLine(index * 3, fabs(previous_heading) * draw_amplifier, (index + 1) * 3, fabs(current_heading * draw_amplifier));
       index++;
       previous_heading = current_heading;
-      if(output < min_output) output = min_output;
+      if(output < 2) output = 2;
       if(output > max_output) output = max_output;
       else if(output < -max_output) output = -max_output;
       driveChassis(-output, output);
@@ -236,8 +236,10 @@ void turnToAngle(double turn_angle, double time_limit_msec, bool exit, double ma
     }
   }
   Brain.Screen.clearScreen(red);
+  
   if(exit) {
     stopChassis(vex::hold);
+    
   }
   correct_angle = turn_angle;
   is_turning = false;
