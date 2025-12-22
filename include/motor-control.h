@@ -3,6 +3,7 @@
 #include "mp.h"
 #include "maths.h"
 #include "pose.h"
+#include "../custom/include/logger.h"
 
 // --- Global Variables (snake_case) ---
 extern bool is_turning;
@@ -12,7 +13,7 @@ extern double correct_angle;
 
 // --- Function Declarations (lowerCamelCase) ---
 void driveChassis(double left_power, double right_power);
-
+extern Logger logger;
 double getInertialHeading(bool normalize = false);
 double normalizeTarget(double angle);
 void driveToHeading(double distance_in, double targetHeading, double time_limit_msec, bool exit = true, double max_output = 12);

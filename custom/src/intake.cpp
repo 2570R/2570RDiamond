@@ -35,9 +35,9 @@ void scoreLongGoal(){
 
 void scoreMiddleGoal(){
     intakeSpeed = 12;
-    hoodSpeed = 8;
+    hoodSpeed = 10;
     intake.spin(forward, 12, voltageUnits::volt);
-    hood.spin(forward, 8, voltageUnits::volt);
+    hood.spin(forward, 10, voltageUnits::volt);
 }
 
 /**

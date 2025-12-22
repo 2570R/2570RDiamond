@@ -11,9 +11,21 @@ ChassisDriverSettings chassisDriverSettings(&controller_1, 1, 0, 10, false);
 TwoStickArcade chassis(chassisGeometry, chassisDriverSettings);
 
 // Modify autonomous, driver, or pre-auton code below
-int auton_selected = 0;
+int auton_selected = 1;
+int color_selected = 1;
 bool auto_started = false;
 vex::thread* odom = nullptr;
+
+
+enum PreAutonState {
+  SELECT_AUTON,
+  SELECT_COLOR,
+  SHOW_SELECTION,
+  DONE
+};
+
+PreAutonState preAutonState = SELECT_AUTON;
+
 
 void taskHandler(bool driver){
   if(!driver && odom == nullptr){
@@ -28,22 +40,23 @@ void taskHandler(bool driver){
 
 }
 void runAutonomous() {
+  Brain.Screen.clearScreen();
   auto_started = true;
   switch(auton_selected) {
     case 0:
-      awp();
+      awp(color_selected);
       break;
     case 1:
-      left7LongandWing();
+      left7LongandWing(color_selected);
       break;  
     case 2:
-      right7LongandWing();
+      right7LongandWing(color_selected);
       break;
     case 3:
-      leftLongAndMid();
+      leftLongAndMid(color_selected);
       break; 
     case 4:
-      leftLongAndMidDisrupt();
+      leftLongAndMidDisrupt(color_selected);
       break;
     case 5:
       left4();
@@ -52,10 +65,14 @@ void runAutonomous() {
       rifour();
       break;
     case 7:
-      //newChangeQOL();
+      matchloaderLeftFourBall(color_selected);
       break;
-
-    
+    case 8:
+      matchloaderRightFourBall(color_selected);
+      break;
+    case 9:
+      matchloaderLeftLongAndMid(color_selected);
+      break;
   }
   
 }
@@ -74,7 +91,7 @@ void runDriver() {
   bool bPressed;
   bool upPressed;
   taskHandler(false);
-  
+  Brain.Screen.clearScreen();
   matchloader.set(false);
   while (true) {
     uint64_t timestamp = vex::timer::systemHighResolution();
@@ -133,11 +150,6 @@ void runDriver() {
         matchloader.set(false);
       }
     }
-    Brain.Screen.printAt(5, 60, "x: %.2f", x_pos);
-    Brain.Screen.printAt(5, 80, "y: %.2f", y_pos);
-    Brain.Screen.printAt(5, 100, "heading: %.2f", normalizeTarget(getInertialHeading()));
-    Brain.Screen.printAt(5, 120, "battery: %.2f", vexBatteryCapacityGet);
-    
 
     wait((timestamp + 11000.0 - vex::timer::systemHighResolution()) / 1000.0, vex::msec);
   }
@@ -145,61 +157,133 @@ void runDriver() {
 
 
 void runPreAutonomous() {
-    // Initializing Robot Configuration. DO NOT REMOVE!
   vexcodeInit();
-  
-  // Calibrate inertial sensor
-  inertial_sensor.calibrate();
 
-  // Wait for the Inertial Sensor to calibrate
+  inertial_sensor.calibrate();
   while (inertial_sensor.isCalibrating()) {
     wait(10, msec);
   }
+
   controller_1.rumble("..--");
-  
-  // odom tracking
+
   resetChassis();
   taskHandler(false);
-  
-  while(!auto_started){
+
+  ballSensTop.setLight(vex::ledState::on);
+  ballSensTop.setLightPower(100, pct);
+
+  while (!auto_started) {
     Brain.Screen.clearScreen();
-    Brain.Screen.printAt(5, 20, "Selected Auton:");
-    Brain.Screen.printAt(5, 40, "-----------");
-    Brain.Screen.printAt(5, 90, "-----------");
- 
-    switch(auton_selected){
-      case 0:
-        Brain.Screen.printAt(5, 60, "AWP");
-        break;
-      case 1:
-        Brain.Screen.printAt(5, 60, "Left 7 Wing");
-        break;
-      case 2:
-        Brain.Screen.printAt(5, 60, "Right 7 Wing");
-        break;
-      case 3:
-        Brain.Screen.printAt(5, 60, "Left Long And Mid Rush");
-        break;
-      case 4:
-        Brain.Screen.printAt(5, 60, "Left Long And Mid No Rush");
-        break;
-      case 5:
-        Brain.Screen.printAt(5, 60, "Left 4 Wing");
-        break;
-      case 6:
-        Brain.Screen.printAt(5, 60, "Right 4 Wing");
-        break;
-      case 7:
-        Brain.Screen.printAt(5, 60, "Test Auto");
-        break;
+
+    if (preAutonState == SELECT_AUTON) {
+      Brain.Screen.printAt(5, 20, "Select Autonomous");
+      Brain.Screen.printAt(5, 40, "Tap to cycle, Hold to confirm");
+      Brain.Screen.printAt(5, 60, "---------------------");
+
+      switch (auton_selected) {
+        case 0: Brain.Screen.printAt(5, 90, "AWP"); break;
+        case 1: Brain.Screen.printAt(5, 90, "Left 7 Wing"); break;
+        case 2: Brain.Screen.printAt(5, 90, "Right 7 Wing"); break;
+        case 3: Brain.Screen.printAt(5, 90, "Left Long + Mid Rush"); break;
+        case 4: Brain.Screen.printAt(5, 90, "Left Long + Mid No Rush"); break;
+        case 5: Brain.Screen.printAt(5, 90, "Left 4 Wing"); break;
+        case 6: Brain.Screen.printAt(5, 90, "Right 4 Wing"); break;
+        case 7: Brain.Screen.printAt(5, 90, "Matchloader Left 4 Wing"); break;
+        case 8: Brain.Screen.printAt(5, 90, "Matchloader Right 4 Wing"); break;
+        case 9: Brain.Screen.printAt(5, 90, "Matchloader Left Long + Mid"); break;
+      }
+
+      if (Brain.Screen.pressing()) {
+        uint32_t pressTime = Brain.timer(msec);
+        while (Brain.Screen.pressing()) {}
+
+        if (Brain.timer(msec) - pressTime > 500) {
+          preAutonState = SELECT_COLOR; // long press = confirm
+        } else {
+          auton_selected = (auton_selected + 1) % 10; // short tap = cycle
+        }
+      }
     }
-    if(Brain.Screen.pressing()){
-      while(Brain.Screen.pressing()) {}
-      auton_selected ++;
-    } else if (auton_selected == 7){
-      auton_selected = 0;
+
+    else if (preAutonState == SELECT_COLOR) {
+      Brain.Screen.printAt(5, 20, "Select Alliance Color");
+      Brain.Screen.printAt(5, 40, "Tap to cycle, Hold to confirm");
+      Brain.Screen.printAt(5, 60, "---------------------");
+
+      if (color_selected == 0)
+        Brain.Screen.printAt(5, 90, "RED");
+      else
+        Brain.Screen.printAt(5, 90, "BLUE");
+
+      if (Brain.Screen.pressing()) {
+        uint32_t pressTime = Brain.timer(msec);
+        while (Brain.Screen.pressing()) {}
+
+        if (Brain.timer(msec) - pressTime > 500) {
+          preAutonState = SHOW_SELECTION;
+        } else {
+          color_selected = !color_selected;
+        }
+      }
     }
-    wait(10, msec);
     
+    else if (preAutonState == SHOW_SELECTION) {
+      Brain.Screen.printAt(5, 20, "AUTO & COLOR SELECTED");
+      Brain.Screen.printAt(5, 40, "---------------------");
+    
+      Brain.Screen.printAt(5, 70, "Autonomous:");
+    
+      switch (auton_selected) {
+        case 0: Brain.Screen.printAt(20, 90, "AWP"); break;
+        case 1: Brain.Screen.printAt(20, 90, "Left 7 Wing"); break;
+        case 2: Brain.Screen.printAt(20, 90, "Right 7 Wing"); break;
+        case 3: Brain.Screen.printAt(20, 90, "Left Long + Mid Rush"); break;
+        case 4: Brain.Screen.printAt(20, 90, "Left Long + Mid No Rush"); break;
+        case 5: Brain.Screen.printAt(20, 90, "Left 4 Wing"); break;
+        case 6: Brain.Screen.printAt(20, 90, "Right 4 Wing"); break;
+        case 7: Brain.Screen.printAt(20, 90, "Matchloader Left 4 Wing"); break;
+        case 8: Brain.Screen.printAt(20, 90, "Matchloader Right 4 Wing"); break;
+        case 9: Brain.Screen.printAt(20, 90, "Matchloader Left Long + Mid"); break;
+      }
+    
+      Brain.Screen.printAt(5, 120, "Color:");
+      if (color_selected == 0)
+        Brain.Screen.printAt(20, 140, "RED");
+      else
+        Brain.Screen.printAt(20, 140, "BLUE");
+    
+      Brain.Screen.printAt(5, 180, "Hold screen to finish");
+    
+      if (Brain.Screen.pressing()) {
+        uint32_t pressTime = Brain.timer(msec);
+        while (Brain.Screen.pressing()) {}
+    
+        if (Brain.timer(msec) - pressTime > 500) {
+          preAutonState = DONE;
+        }
+      }
+    }
+
+    else if(preAutonState == DONE){
+      Brain.Screen.clearScreen();
+      Brain.Screen.printAt(5, 20, "Odom:");
+      Brain.Screen.printAt(20, 40, "x: %.2f", x_pos);
+      Brain.Screen.printAt(20, 60, "y: %.2f", y_pos);
+      Brain.Screen.printAt(20, 80, "heading: %.2f", inertial_sensor.heading(deg));
+      Brain.Screen.printAt(5, 100, "Telemetry:");
+      Brain.Screen.printAt(20, 120, "front distance sensor(in): %.2f", frontDistanceSensor.value()/25.4);
+      Brain.Screen.printAt(20, 140, "left distance sensor(in): %.2f", leftDistanceSensor.value()/25.4);
+      Brain.Screen.printAt(20, 160, "right distance sensor(in): %.2f", rightDistanceSensor.value()/25.4);
+      Brain.Screen.printAt(20, 180, "hue: %.2f", ballSensTop.hue());
+      Brain.Screen.printAt(20, 200, "battery: %.2f", vexBatteryCapacityGet);
+
+    }
+
+    wait(20, msec);
   }
+  Brain.Screen.clearScreen();
+  
+  // ----- CLEANUP AFTER PRE-AUTON -----
+  
 }
+

@@ -47,7 +47,7 @@ distance backDistanceSensor = distance(PORT8);
 distance frontDistanceSensor = distance(PORT15);
 distance leftDistanceSensor = distance(PORT3);
 distance rightDistanceSensor = distance(PORT4);
-optical ballSensTop = optical(14);
+optical ballSensTop = optical(PORT14);
 // ============================================================================
 // USER-CONFIGURABLE PARAMETERS (CHANGE BEFORE USING THIS TEMPLATE)
 // ============================================================================

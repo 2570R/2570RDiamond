@@ -7,6 +7,7 @@
 #include "../custom/include/autonomous.h"
 #include "../custom/include/robot-config.h"
 #include "../custom/include/logger.h"
+Logger logger(std::cout, Logger::Level::DEBUG);
 // ============================================================================
 // INTERNAL STATE (DO NOT CHANGE)
 // ============================================================================
@@ -51,8 +52,6 @@ void resetChassis() {
 }
 
 void resetAngle(double angle){
-  double prev_heading_rad = 0;
-  double local_polar_angle_rad = 0;
   inertial_sensor.setRotation(angle, degrees);
   //inertial_sensor.setRotation(angle, degrees);
 }
@@ -200,8 +199,6 @@ void turnToAngle(double turn_angle, double time_limit_msec, bool exit, double ma
       Brain.Screen.drawLine(index * 3, fabs(previous_heading) * draw_amplifier, (index + 1) * 3, fabs(current_heading * draw_amplifier));
       index++;
       previous_heading = current_heading;
-      // Clamp output
-      if(output < 2) output = 2;
       if(output > max_output) output = max_output;
       else if(output < -max_output) output = -max_output;
       driveChassis(output, -output);
@@ -215,7 +212,6 @@ void turnToAngle(double turn_angle, double time_limit_msec, bool exit, double ma
       Brain.Screen.drawLine(index * 3, fabs(previous_heading) * draw_amplifier, (index + 1) * 3, fabs(current_heading * draw_amplifier));
       index++;
       previous_heading = current_heading;
-      if(output < 2) output = 2;
       if(output > max_output) output = max_output;
       else if(output < -max_output) output = -max_output;
       driveChassis(-output, output);
@@ -235,6 +231,7 @@ void turnToAngle(double turn_angle, double time_limit_msec, bool exit, double ma
       wait(10, msec);
     }
   }
+  logger.info("end x: %.2f, y: %.2f, theta: %.2f", x_pos, y_pos, normalizeTarget(getInertialHeading()));
   Brain.Screen.clearScreen(red);
   
   if(exit) {
@@ -281,7 +278,7 @@ void driveToDist(double distance_mm, int dir, double time_limit_msec, bool exit,
     PID pid_heading = correctPID;
 
     // Configure PID controllers
-    pid_distance.setTarget(start_distance - distance_mm);
+    pid_distance.setTarget(distance_mm);
     pid_distance.setIntegralMax(3);  
     pid_distance.setSmallBigErrorTolerance(threshold, threshold * 3);
     pid_distance.setSmallBigErrorDuration(50, 50);
@@ -300,8 +297,7 @@ void driveToDist(double distance_mm, int dir, double time_limit_msec, bool exit,
     double current_distance = 0, current_angle = 0;
     Brain.Screen.setPenColor(black);
     // Main PID loop for driving straight using distance sensor
-    while (((!pid_distance.targetArrived()) && Brain.timer(msec) - start_time <= time_limit_msec && exit) || 
-           (!exit && current_distance < distance_mm && Brain.timer(msec) - start_time <= time_limit_msec)) {
+    while (((!pid_distance.targetArrived()) && Brain.timer(msec) - start_time <= time_limit_msec && exit)) {
 
         // Calculate current distance and heading
         current_distance = fabs(frontDistanceSensor.value()/25.4 - distance_mm);
@@ -323,6 +319,10 @@ void driveToDist(double distance_mm, int dir, double time_limit_msec, bool exit,
         // Apply heading correction
         left_output += correction_output;
         right_output -= correction_output;
+
+        if(fabs(current_distance - distance_mm) < 2){
+          heading_correction = 0;
+        }
 
         // Max Output Check
         scaleToMax(left_output, right_output, max_output);
@@ -347,6 +347,7 @@ void driveToDist(double distance_mm, int dir, double time_limit_msec, bool exit,
         driveChassis(left_output, right_output);
         wait(10, msec);
     }
+    logger.info("end x: %.2f, y: %.2f, theta: %.2f", x_pos, y_pos, normalizeTarget(getInertialHeading()));
     Brain.Screen.clearScreen(red);
     if(exit) {
         prev_left_output = 0;
@@ -455,6 +456,7 @@ void driveTo(double distance_in, double time_limit_msec, bool exit, double max_o
     driveChassis(left_output, right_output);
     wait(10, msec);
   }
+  logger.info("end x: %.2f, y: %.2f, theta: %.2f", x_pos, y_pos, normalizeTarget(getInertialHeading()));
   Brain.Screen.clearScreen(red);
   if(exit) {
     prev_left_output = 0;
@@ -557,6 +559,7 @@ void driveToHeading(double distance_in, double targetHeading, double time_limit_
     driveChassis(left_output, right_output);
     wait(10, msec);
   }
+  logger.info("end x: %.2f, y: %.2f, theta: %.2f", x_pos, y_pos, normalizeTarget(getInertialHeading()));
   Brain.Screen.clearScreen(red);
   if(exit) {
     prev_left_output = 0;
@@ -746,6 +749,7 @@ void curveCircle(double result_angle_deg, double center_radius, double time_limi
       wait(10, msec);
     }
   }
+  logger.info("end x: %.2f, y: %.2f, theta: %.2f", x_pos, y_pos, normalizeTarget(getInertialHeading()));
   Brain.Screen.clearScreen(red);
   // Stop the chassis if required
   if(exit == true) {
@@ -933,6 +937,7 @@ void swing(double swing_angle, double drive_direction, double time_limit_msec, b
     }
     wait(10, msec);
   }
+  logger.info("end x: %.2f, y: %.2f, theta: %.2f", x_pos, y_pos, normalizeTarget(getInertialHeading()));
   Brain.Screen.clearScreen(red);
   if(exit == true) {
     stopChassis(vex::hold); // Stop chassis at end if required
@@ -974,7 +979,7 @@ void correctHeading() {
  * Tracks the robot's position using only drivetrain encoders and inertial sensor.
  * Assumes no external odometry tracking wheels.
  */
-Logger logger(std::cout, Logger::Level::DEBUG);
+
 void trackNoOdomWheel() {
   resetChassis();
   double prev_heading_rad = 0;
@@ -1211,7 +1216,8 @@ void turnToPoint(double x, double y, int direction, double time_limit_msec) {
 
     driveChassis(output, -output); // Apply output to chassis
     wait(10, msec);
-  }  
+  }
+  logger.info("end x: %.2f, y: %.2f, theta: %.2f", x_pos, y_pos, normalizeTarget(getInertialHeading()));  
   stopChassis(vex::hold); // Stop at end
   correct_angle = getInertialHeading(); // Update global heading
   is_turning = false;                   // Reset turning state
@@ -1352,6 +1358,7 @@ void moveToPoint(double x, double y, int dir, double time_limit_msec, bool exit,
     prev_right_output = 0;
     stopChassis(vex::hold); // Stop at end if required
   } 
+  logger.info("end x: %.2f, y: %.2f, theta: %.2f", x_pos, y_pos, normalizeTarget(getInertialHeading()));
   correct_angle = getInertialHeading(); // Update global heading
   is_turning = false;                   // Reset turning state
 }
@@ -1448,6 +1455,7 @@ void moveToPointChain(double x, double y, int dir, double exit_dist, double time
     driveChassis(left_output, right_output); // Apply output to chassis
     wait(10, msec);
   }
+  logger.info("end x: %.2f, y: %.2f, theta: %.2f", x_pos, y_pos, normalizeTarget(getInertialHeading()));
   Brain.Screen.clearScreen(red);
   stopChassis(vex::coast);
   correct_angle = getInertialHeading(); // Update global heading
@@ -1601,6 +1609,7 @@ void boomerang(double x, double y, int dir, double a, double dlead, double time_
     prev_right_output = 0;
     stopChassis(vex::hold); // Stop at end if required
   }
+  logger.info("end x: %.2f, y: %.2f, theta: %.2f", x_pos, y_pos, normalizeTarget(getInertialHeading()));
   correct_angle = a;      // Update global heading
   is_turning = false;     // Reset turning state
 }
@@ -1744,6 +1753,7 @@ void followPath(Point p0, Point p1, Point p2, Point p3, bool exit, int timeout_m
     
     wait(10, msec);
   }
+  logger.info("end x: %.2f, y: %.2f, theta: %.2f", x_pos, y_pos, normalizeTarget(getInertialHeading()));
   if(exit){
     prev_left_output = 0;
     prev_right_output = 0;
